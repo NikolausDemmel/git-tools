@@ -127,7 +127,7 @@ class ExternalsProcessor
       dir = ext[:dir]
       url = ext[:url]
 
-      #puts "Dir=#{dir} URL=#{url} rev=#{ext[:rev]}"
+      puts "DEBUG: Dir=#{dir} URL=#{url} rev=#{ext[:rev]}"
 
       raise "Error: svn:externals cycle detected: '#{url}'" if known_url?(url)
       raise "Error: Unable to find or mkdir '#{dir}'" unless File.exist?(dir) || FileUtils.mkpath(dir)
@@ -150,7 +150,7 @@ class ExternalsProcessor
 
 
   def find_non_externals_sandboxes(externals)
-    externals_dirs = externals.map { |x| x[0] }
+    externals_dirs = externals.map { |x| x[:dir] }
     sandboxes = find_git_svn_sandboxes_in_current_dir
     non_externals_sandboxes = sandboxes.select { |sandbox| externals_dirs.select { |external| sandbox.index(external) == 0}.empty? }
     return if non_externals_sandboxes.empty?
@@ -184,24 +184,48 @@ class ExternalsProcessor
       # first-time clone
       raise "Error: Missing externals URL for '#{Dir.getwd}'" unless @externals_url
       no_history_option = no_history? ? '-r HEAD' : ''
-      rev_option = @rev ? "-r #{@rev}" : ''
-      shell("git svn clone #{no_history_option} #{rev_option} #@externals_url .")
+      shell("git svn clone #{no_history_option} #@externals_url .")
     elsif contents == ['.git']
       # interrupted clone, restart with fetch
-      shell('git svn fetch')
+      shell("git svn fetch")
+      # TODO: it's possible to have an incomplete .git if the clone was
+      # stopped. Recovery requires manual intervention.
     else
       # regular update, rebase to SVN head
       check_working_copy_git
       check_working_copy_dirty
       check_working_copy_url
-      check_working_copy_branch
+      # only check on the branch if we're not pegged to a revision
+      check_working_copy_branch unless @rev
 
       # All sanity checks OK, perform the update
-      output = shell('git svn rebase', true, [/is up to date/, /First, rewinding/, /Fast-forwarded master/, /W: -empty_dir:/])
-      if output.include?('Current branch master is up to date.')
+      output = shell("git svn rebase", true, [/is up to date/, /First, rewinding/, /Fast-forwarded master/, /W: -empty_dir:/])
+      if @rev.nil? and output.include?('Current branch master is up to date.')
         restore_working_copy_branch
       end
     end
+    
+    # If the external is pegged to a revision, use reset to update to that rev
+    # and checkout that revision
+    if @rev 
+      output = shell("git svn reset -r #{@rev}")
+      # TODO: error checking?
+      output = shell("git checkout remotes/git-svn")
+
+    end
+
+    # TODO: after 'git checkout...', I see
+    # git-tools/git-svn-clone-externals.rb:225:in `check_working_copy_branch': Error: Unable to determine Git branch in '/cygdrive/c/home/dbacher/Code/serial-mux-git/shared/build' using 'git status' (RuntimeError)
+    #         from git-tools/git-svn-clone-externals.rb:198:in `update_current_dir'
+    #         from git-tools/git-svn-clone-externals.rb:102:in `run'
+    #         from git-tools/git-svn-clone-externals.rb:136:in `process_externals'
+    #         from git-tools/git-svn-clone-externals.rb:136:in `chdir'
+    #         from git-tools/git-svn-clone-externals.rb:136:in `process_externals'
+    #         from git-tools/git-svn-clone-externals.rb:126:in `each'
+    #         from git-tools/git-svn-clone-externals.rb:126:in `process_externals'
+    #         from git-tools/git-svn-clone-externals.rb:108:in `run'
+    #         from git-tools/git-svn-clone-externals.rb:468
+
   end
 
 
@@ -400,6 +424,8 @@ class ExternalsProcessor
   def shell(cmd, echo_stdout = false, echo_filter = [])
     t1 = Time.now
 
+    puts "DEBUG: running: #{cmd}"
+
     output = []
     done = false
     while !done do
@@ -414,6 +440,8 @@ class ExternalsProcessor
             error = stderr.readlines
             if error.join('') =~ /SSL negotiation failed/
               done = false
+              # DB: why does this happen? 
+              # TODO: preserve command arguments
               puts "shell command #{cmd} failed, retrying..."
               if cmd =~ /git svn clone/
                 cmd_new = 'git svn fetch'
