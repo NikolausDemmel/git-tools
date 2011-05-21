@@ -253,6 +253,13 @@ class ExternalsProcessor
     # If the external is pegged to a revision, use reset to update to that rev
     # and checkout that revision
     if @rev 
+      # TODO: better to create a branch from the rev ?
+      # depends on whether we expect commits in this external
+      # rev_sha = git svn find-rev r{@rev}
+      # git checkout master
+      # git branch -f <branch> rev_sha
+      # git checkout <branch>
+      
       output = shell("git svn reset -r #{@rev}")
       # TODO: error checking?
       output = shell("git checkout remotes/git-svn")
