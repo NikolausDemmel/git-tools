@@ -338,7 +338,7 @@ class ExternalsProcessor
     return read_externals_quick if quick?
     
     @repo = svn_info_for_current_dir['Repository Root']
-    externals = parse_externals(shell('git svn show-externals'))
+    externals = parse_externals(shell('git svn show-externals'), @repo)
     
     # externals = shell('git svn show-externals').reject { |x| x =~ %r%^\s*/?\s*#% }
     # versioned_externals = externals.grep(/-r\d+\b/i)
