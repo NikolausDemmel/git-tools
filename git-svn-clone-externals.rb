@@ -289,7 +289,7 @@ class ExternalsProcessor
   
 
   def process_svn_ignore_for_current_dir
-    svn_ignored = shell('git svn show-ignore').reject { |x| x =~ %r%^\s*/?\s*#% }.grep(%r%^/(\S+)%) { $~[1] }
+    svn_ignored = shell('git svn show-ignore').reject { |x| x =~ %r%^\s*/?\s*#% }.grep(%r%^(/\S+)%) { $~[1] }
     update_exclude_file_with_paths(svn_ignored) unless svn_ignored.empty?
   end
 
