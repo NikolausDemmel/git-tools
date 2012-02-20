@@ -326,6 +326,13 @@ class ExternalsProcessor
   end
 
 
+  def svn_repository_root_for_current_dir
+    root = svn_info_for_current_dir['Repository Root']
+    raise "Unable to determine SVN Repository Root for '#{Dir.getwd}'" unless root
+    root
+  end
+
+
   def known_url?(url)
     return false if quick?
     url == svn_url_for_current_dir || (@parent && @parent.known_url?(url))
