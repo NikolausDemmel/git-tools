@@ -268,7 +268,7 @@ class ExternalsProcessor
   
   def read_externals
     return read_externals_quick if quick?
-    externals = shell('git svn show-externals').reject { |x| x =~ %r%^\s*/?\s*#% }
+    externals = shell('git svn show-externals').reject { |x| x =~ %r%(^\s*/?\s*#)|(^$)% }
     versioned_externals = externals.grep(/-r\d+\b/i)
     unless versioned_externals.empty?
       raise "Error: Found external(s) pegged to fixed revision: '#{versioned_externals.join ', '}' in '#{Dir.getwd}', don't know how to handle this."
