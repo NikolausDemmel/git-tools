@@ -104,6 +104,9 @@ class ExternalsProcessor
     return 0 if @parent && quick?
 
     externals = read_externals
+#    print(externals.join("\n"))
+#    exit(-1)
+
     preflight_externals(externals)
     process_externals(externals)
 
@@ -136,12 +139,14 @@ class ExternalsProcessor
 
   def process_externals(externals)
     externals.each do |dir, url|
+#      puts "Processing external #{dir} with url #{url}"
       raise "Error: svn:externals cycle detected: '#{url}'" if known_url?(url)
       raise "Error: Unable to find or mkdir '#{dir}'" unless File.exist?(dir) || FileUtils.mkpath(dir)
       raise "Error: Expected '#{dir}' to be a directory" unless File.directory?(dir)
 
       Dir.chdir(dir) { self.class.new(:parent => self, :externals_url => url).run }
-      update_exclude_file_with_paths([dir]) unless quick?
+      # remove the prepending '.' from dir for the ingore file
+      update_exclude_file_with_paths([dir[1..-1]]) unless quick? 
     end
   end
 
@@ -155,8 +160,10 @@ class ExternalsProcessor
 
 
   def find_non_externals_sandboxes(externals)
-    externals_dirs = externals.map { |x| x[0] }
-    sandboxes = find_git_svn_sandboxes_in_current_dir
+    externals_dirs = externals.map { |x| File.expand_path(x[0]) }
+    sandboxes = find_git_svn_sandboxes_in_current_dir.map { |x| File.expand_path(x) } 
+#    print externals_dirs.join("\n")
+#    print sandboxes.join("\n")
     non_externals_sandboxes = sandboxes.select { |sandbox| externals_dirs.select { |external| sandbox.index(external) == 0}.empty? }
     return if non_externals_sandboxes.empty?
     collect_warning('unknown_sandbox', 'Found git-svn sandboxes that do not correspond to SVN externals', non_externals_sandboxes.map {|x| "#{Dir.getwd}/#{x}"})
@@ -268,12 +275,39 @@ class ExternalsProcessor
   
   def read_externals
     return read_externals_quick if quick?
-    externals = shell('git svn show-externals').reject { |x| x =~ %r%(^\s*/?\s*#)|(^$)% }
+    externals = shell('git svn show-externals').reject { |x| x =~ %r%^$% } # remove
+    # empty lines remove commented lines (fix flaky show-externals output of
+    # externals that are commented in svn:
+    externals = externals.reject { |x| x =~ %r%(^\S*\s*#)|(^#)% } 
+    # lines starting with / and not having any whitespaces are probably just
+    # flaky outputs of show-externals where there was an actual empty line in
+    # the svn:externals definition somewhere (which seems to be an svn-bug?)
+    externals = externals.reject { |x| x =~ %r%^/\S*$% } 
     versioned_externals = externals.grep(/-r\d+\b/i)
     unless versioned_externals.empty?
       raise "Error: Found external(s) pegged to fixed revision: '#{versioned_externals.join ', '}' in '#{Dir.getwd}', don't know how to handle this."
     end
-    externals.grep(%r%^/(\S+)\s+(\S+)%) { $~[1,2] }
+    peg_revision_externals = externals.grep(/@/)
+    unless peg_revision_externals.empty?
+      raise "Error: Found external(s) that seem to have a peg revision: '#{peg_revision_externals.join ', '}' in '#{Dir.getwd}', don't know how to handle this."
+    end
+    non_root_relative_externals = externals.reject { |x| x =~ /.*\^.*/ }
+    unless non_root_relative_externals.empty?
+      raise "Error: Found external(s) that don't use the root relative syntax (^): '#{non_root_relative_externals.join ', '}' in '#{Dir.getwd}'. Not yet implemented."
+    end
+    externals = externals.grep(%r%^(\S+)\s+(\S+)$%) { $~[1,2] }
+
+    # process externals: replaceing "^" by the repository root, adding the
+    # prefix to the local path, and changing the order of url and local dir
+    processed_externals = []
+    root = svn_repository_root_for_current_dir
+    externals.each do |url, dir|
+      /^(.*)\^(.*)$/ =~ url
+      dir = "." + $1 + dir  # prefix starts with a '/', thus add a . to make the path relative
+      url = root + $2
+      processed_externals << [dir, url]
+    end
+    processed_externals
   end
 
 
