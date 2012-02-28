@@ -150,6 +150,7 @@ class ExternalsProcessor
     return 0 if @parent && quick?
 
     externals = read_externals
+    preflight_externals(externals)
     process_externals(externals)
 
     find_non_externals_sandboxes(externals) unless quick?
@@ -162,6 +163,20 @@ class ExternalsProcessor
     end
 
     0
+  end
+
+
+  def preflight_externals(externals)
+  	externals = externals.select { |dir, url| File.exists?(dir) }
+    have_dirty_files = false
+    externals.each do |dir, url|
+      Dir.chdir(dir) do
+      	have_dirty_files = check_working_copy_dirty || have_dirty_files
+      end
+    end
+    if have_dirty_files
+	  exit 1
+    end
   end
 
 
@@ -238,7 +253,6 @@ class ExternalsProcessor
     else
       # regular update, rebase to SVN head
       check_working_copy_git
-      check_working_copy_dirty
       check_working_copy_url
       # only check on the branch if we're not pegged to a revision
       check_working_copy_branch unless @rev
@@ -314,7 +328,13 @@ class ExternalsProcessor
         dirty = shell('git status').map { |x| x =~ /modified:\s*(.+)/; $~ ? $~[1] : nil }.compact
       end
 
-      raise "Error: Can't run svn rebase with dirty files in '#{Dir.getwd}':\n#{dirty.map {|x| x + "\n"}}" unless dirty.empty?
+      if dirty.empty?
+	    return false
+      end
+
+      puts "Error: Can't run svn rebase with dirty files in '#{Dir.getwd}':\n#{dirty.map {|x| x + "\n"}}"
+
+      true
   end
 
 
@@ -363,7 +383,7 @@ class ExternalsProcessor
   
 
   def process_svn_ignore_for_current_dir
-    svn_ignored = shell('git svn show-ignore').reject { |x| x =~ %r%^\s*/?\s*#% }.grep(%r%^/(\S+)%) { $~[1] }
+    svn_ignored = shell('git svn show-ignore').reject { |x| x =~ %r%^\s*/?\s*#% }.grep(%r%^(/\S+)%) { $~[1] }
     update_exclude_file_with_paths(svn_ignored) unless svn_ignored.empty?
   end
 
