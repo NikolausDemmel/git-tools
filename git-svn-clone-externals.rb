@@ -98,6 +98,14 @@ class ExternalsProcessor
 
   def run
     t1 = Time.now
+
+    # only print this for topmost call
+    unless @parent
+      if quick?
+        puts "Quick mode"
+      end
+    end
+
     update_current_dir
     process_svn_ignore_for_current_dir unless quick?
 
@@ -204,6 +212,7 @@ class ExternalsProcessor
       # regular update, rebase to SVN head
       check_working_copy_git
       check_working_copy_url
+      check_working_copy_dirty # do a second check for dirty directories
       check_working_copy_branch
 
       # All sanity checks OK, perform the update
