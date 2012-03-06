@@ -9,13 +9,16 @@ function gitcheckstatus {
 	olddir=`pwd`
 	cd $1
 	STATUS=`git status`
-	if [[ $STATUS =~ .*(working\ directory\ clean).* ]] ; then
+    [[ $STATUS =~ .*(working\ directory\ clean).* ]]
+    CLEAN=$?
+    git log git-svn..master --oneline
+	if `exit $CLEAN` ; then
 		# echo "clean"
 		if [[ $PARAM1 == "all" ]] ; then
-			git status
+			git status -s
 		fi
 	else
-		git status
+		git status -s
 	fi
 	cd $olddir
 }
