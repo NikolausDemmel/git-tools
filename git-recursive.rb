@@ -82,7 +82,7 @@ class Processor
       puts "   CHECKING %s" % r
       if do_svn
         Dir.chdir(r) do
-          system "git log git-svn..master --oneline"
+          system "git --no-pager log git-svn..master --oneline"
         end
       end
       if !clean_repo?(r) || do_all
