@@ -73,6 +73,7 @@ class Processor
     do_all = @other.delete("-a")
     do_branch = @other.delete("-b")
     do_svn = @other.delete("-s")
+    do_stash = do_svn
     if @other.length != 0
       usage
     end
@@ -83,6 +84,7 @@ class Processor
       if do_svn
         Dir.chdir(r) do
           system "git --no-pager log git-svn..master --oneline"
+          system "git --no-pager stash list"
         end
       end
       if !clean_repo?(r) || do_all
